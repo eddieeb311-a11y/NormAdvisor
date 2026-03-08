@@ -20,6 +20,8 @@ namespace NormAdvisor.AutoCAD1.Services
     {
         public const string RegAppName = "NORMADVISOR";
         public const string LayerName = "NORM_ROOM_BOUNDARY";
+        public const string RoomAreaLayerName = "NORM_ROOM_AREA";
+        public const string RoomNumLayerName = "NORM_ROOM_NUM";
         private static readonly object VirtualLock = new object();
         private static readonly Dictionary<string, Extents3d> VirtualBoundsByRoomId =
             new Dictionary<string, Extents3d>(StringComparer.OrdinalIgnoreCase);
@@ -855,6 +857,7 @@ namespace NormAdvisor.AutoCAD1.Services
 
                 // â”€â”€ Matching Ð±ÑÐ»Ñ‚Ð³ÑÐ» â”€â”€
                 int matched = 0;
+                int layerMatched = 0;
                 bool msUpgraded = false;
                 // Always rematch all rooms on each run.
                 var unmatchedRooms = rooms.ToList();
@@ -865,6 +868,127 @@ namespace NormAdvisor.AutoCAD1.Services
                 // PASS 1: Ð¢ÐµÐºÑÑ‚-Ð´Ð¾Ñ‚Ð¾Ñ€-polyline matching
                 // Polyline Ð±Ò¯Ñ€Ð¸Ð¹Ð½ Ð´Ð¾Ñ‚Ð¾Ñ€ Ð±Ð°Ð¹Ð³Ð°Ð° Ñ‚ÐµÐºÑÑ‚Ð¸Ð¹Ð³ Ð¾Ð»Ð¶, Ó©Ñ€Ó©Ó©Ñ‚ÑÐ¹ Ñ‚Ð¾Ñ…Ð¸Ñ€ÑƒÑƒÐ»Ð½Ð°
                 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+                // ═══════════════════════════════════════════════
+                // PASS 0: Layer-based matching (100% accurate)
+                // NORM_ROOM_AREA layer -> polyline
+                // NORM_ROOM_NUM layer -> text (дугаар)
+                // ═══════════════════════════════════════════════
+                {
+                    var roomAreaPolys = new List<PolylineData>();
+                    var roomNumTexts = new List<TextData>();
+
+                    // NORM_ROOM_AREA layer дээрх polyline цуглуулах
+                    foreach (var poly in closedPolylines)
+                    {
+                        var ent = tr.GetObject(poly.ObjectId, OpenMode.ForRead) as Entity;
+                        if (ent != null && string.Equals(ent.Layer, RoomAreaLayerName, StringComparison.OrdinalIgnoreCase))
+                            roomAreaPolys.Add(poly);
+                    }
+
+                    // NORM_ROOM_NUM layer дээрх текст DB-с скан хийх
+                    foreach (ObjectId id in ms)
+                    {
+                        var entity = tr.GetObject(id, OpenMode.ForRead) as Entity;
+                        if (entity == null) continue;
+                        if (!string.Equals(entity.Layer, RoomNumLayerName, StringComparison.OrdinalIgnoreCase))
+                            continue;
+
+                        string content = null;
+                        Point2d pos = default;
+
+                        if (entity is DBText dtxt)
+                        {
+                            content = GetTextContent(dtxt, tr);
+                            pos = new Point2d(dtxt.Position.X, dtxt.Position.Y);
+                        }
+                        else if (entity is MText mtxt2)
+                        {
+                            content = GetTextContent(mtxt2, tr);
+                            pos = new Point2d(mtxt2.Location.X, mtxt2.Location.Y);
+                        }
+
+                        if (!string.IsNullOrEmpty(content))
+                        {
+                            if (!hasBounds || IsInBounds(pos, bMinX, bMaxX, bMinY, bMaxY))
+                                roomNumTexts.Add(new TextData { Content = content, Position = pos });
+                        }
+                    }
+
+                    if (roomAreaPolys.Count > 0 && roomNumTexts.Count > 0)
+                    {
+                        ed.WriteMessage($"\n\n  -- PASS 0: layer-based matching ({RoomAreaLayerName}: {roomAreaPolys.Count} polys, {RoomNumLayerName}: {roomNumTexts.Count} texts) --");
+
+                        var matchedRoomsP0 = new HashSet<RoomInfo>();
+                        var matchedPolysP0 = new HashSet<PolylineData>();
+
+                        foreach (var poly in roomAreaPolys)
+                        {
+                            var insideTexts = roomNumTexts.Where(t => IsPointInsidePolygon(t.Position, poly.Points)).ToList();
+                            if (insideTexts.Count == 0) continue;
+
+                            string numContent = insideTexts[0].Content.Trim();
+
+                            // 1) RoomId-р хайх (a1, b2)
+                            RoomInfo matchedRoom = unmatchedRooms.FirstOrDefault(r =>
+                                !matchedRoomsP0.Contains(r) &&
+                                !string.IsNullOrWhiteSpace(r.RoomId) &&
+                                string.Equals(r.RoomId.Trim(), numContent, StringComparison.OrdinalIgnoreCase));
+
+                            // 2) Дугаараар хайх
+                            if (matchedRoom == null && int.TryParse(numContent, out int parsedNum))
+                            {
+                                matchedRoom = unmatchedRooms.FirstOrDefault(r =>
+                                    !matchedRoomsP0.Contains(r) && r.Number == parsedNum);
+                            }
+
+                            // 3) Нэрээр хайх
+                            if (matchedRoom == null)
+                            {
+                                matchedRoom = unmatchedRooms.FirstOrDefault(r =>
+                                    !matchedRoomsP0.Contains(r) &&
+                                    !string.IsNullOrWhiteSpace(r.Name) &&
+                                    string.Equals(r.Name.Trim(), numContent, StringComparison.OrdinalIgnoreCase));
+                            }
+
+                            if (matchedRoom == null) continue;
+
+                            var linkResult = LinkPolyToRoom(poly, matchedRoom, tr, db, ms, ref msUpgraded, areaScale);
+                            results.Add(linkResult);
+                            matchedRoomsP0.Add(matchedRoom);
+                            matchedPolysP0.Add(poly);
+                            availablePolys.Remove(poly);
+                            matched++;
+                            layerMatched++;
+
+                            ed.WriteMessage($"\n    LAYER \"{numContent}\" -> {matchedRoom.Number}. {matchedRoom.Name} ({linkResult.DrawnArea:F2} m2)");
+                        }
+
+                        unmatchedRooms.RemoveAll(r => matchedRoomsP0.Contains(r));
+                        ed.WriteMessage($"\n    Layer matched: {layerMatched}/{rooms.Count}");
+
+                        if (unmatchedRooms.Count == 0)
+                        {
+                            var layerTable2 = (LayerTable)tr.GetObject(db.LayerTableId, OpenMode.ForRead);
+                            if (layerTable2.Has(LayerName))
+                            {
+                                var layer2 = (LayerTableRecord)tr.GetObject(layerTable2[LayerName], OpenMode.ForWrite);
+                                layer2.Color = Color.FromColorIndex(ColorMethod.ByAci, 251);
+                                layer2.IsPlottable = false;
+                            }
+                            tr.Commit();
+                            ed.WriteMessage($"\n\n  === Result: {matched}/{rooms.Count} rooms (layer:{layerMatched}) - ALL MATCHED ===");
+                            return results;
+                        }
+                    }
+                    else if (roomAreaPolys.Count > 0 || roomNumTexts.Count > 0)
+                    {
+                        ed.WriteMessage($"\n\n  -- PASS 0: skipped ({RoomAreaLayerName}: {roomAreaPolys.Count}, {RoomNumLayerName}: {roomNumTexts.Count} - both needed) --");
+                    }
+                }
+
+                // ═══════════════════════════════════════════════
+                // PASS 1: text-inside-polyline matching (fallback)
+                // ═══════════════════════════════════════════════
                 ed.WriteMessage($"\n\n  -- PASS 1: text matching --");
                 int textMatched = 0;
 
@@ -1106,7 +1230,7 @@ namespace NormAdvisor.AutoCAD1.Services
                 }
 
                 tr.Commit();
-                ed.WriteMessage($"\n\n  === Result: {matched}/{rooms.Count} rooms (text:{textMatched}, area:{areaMatched}) ===");
+                ed.WriteMessage($"\n\n  === Result: {matched}/{rooms.Count} rooms (layer:{layerMatched}, text:{textMatched}, area:{areaMatched}) ===");
                 int notMatched = rooms.Count(r => !r.HasBoundary) - matched;
                 if (notMatched > 0)
                     ed.WriteMessage($"\n  Unmatched rooms: {notMatched} (link manually)");

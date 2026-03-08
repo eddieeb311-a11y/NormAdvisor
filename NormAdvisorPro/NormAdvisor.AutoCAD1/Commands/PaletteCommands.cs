@@ -1468,12 +1468,180 @@ namespace NormAdvisor.AutoCAD1.Commands
                 ed.WriteMessage($"\nÐÐ»Ð´Ð°Ð°: {ex.Message}");
             }
         }
+
+        /// <summary>
+        /// NORMPREPLAYERS — Зураг дээрх area polyline болон дугаар текстийг
+        /// NORM_ROOM_AREA / NORM_ROOM_NUM layer руу шилжүүлэх
+        /// Хэрэглэгч: area polyline-н layer сонгоно -> NORM_ROOM_AREA руу шилжүүлнэ
+        ///            дугаар текстийн layer сонгоно -> NORM_ROOM_NUM руу шилжүүлнэ
+        /// </summary>
+        [CommandMethod("NORMPREPLAYERS")]
+        public void PrepareNormLayers()
+        {
+            var doc = Application.DocumentManager.MdiActiveDocument;
+            var ed = doc.Editor;
+            var db = doc.Database;
+
+            try
+            {
+                using (var lockDoc = doc.LockDocument())
+                using (var tr = db.TransactionManager.StartTransaction())
+                {
+                    var layerTable = (LayerTable)tr.GetObject(db.LayerTableId, OpenMode.ForRead);
+
+                    // NORM_ROOM_AREA layer үүсгэх
+                    if (!layerTable.Has(RoomBoundaryService.RoomAreaLayerName))
+                    {
+                        layerTable.UpgradeOpen();
+                        var newLayer = new LayerTableRecord();
+                        newLayer.Name = RoomBoundaryService.RoomAreaLayerName;
+                        newLayer.Color = Autodesk.AutoCAD.Colors.Color.FromColorIndex(
+                            Autodesk.AutoCAD.Colors.ColorMethod.ByAci, 30); // orange
+                        layerTable.Add(newLayer);
+                        tr.AddNewlyCreatedDBObject(newLayer, true);
+                    }
+
+                    // NORM_ROOM_NUM layer үүсгэх
+                    if (!layerTable.Has(RoomBoundaryService.RoomNumLayerName))
+                    {
+                        if (!layerTable.IsWriteEnabled) layerTable.UpgradeOpen();
+                        var newLayer = new LayerTableRecord();
+                        newLayer.Name = RoomBoundaryService.RoomNumLayerName;
+                        newLayer.Color = Autodesk.AutoCAD.Colors.Color.FromColorIndex(
+                            Autodesk.AutoCAD.Colors.ColorMethod.ByAci, 1); // red
+                        layerTable.Add(newLayer);
+                        tr.AddNewlyCreatedDBObject(newLayer, true);
+                    }
+
+                    tr.Commit();
+                }
+
+                // === 1. Area polyline layer сонгох ===
+                ed.WriteMessage($"\n\n=== NORM Layer Prep ===");
+                ed.WriteMessage($"\n  Өрөөний хилийн polyline-г агуулсан layer-н нэрийг оруулна уу.");
+                ed.WriteMessage($"\n  (Эсвэл polyline-г шууд сонгож болно)");
+
+                var kwOpts = new PromptKeywordOptions(
+                    "\n[Layer нэрээр(L)/Polyline сонгох(S)] <Layer>: ");
+                kwOpts.Keywords.Add("Layer", "L", "Layer(L)");
+                kwOpts.Keywords.Add("Select", "S", "Select(S)");
+                kwOpts.Keywords.Default = "Layer";
+                kwOpts.AllowNone = true;
+
+                var kwResult = ed.GetKeywords(kwOpts);
+                string mode = kwResult.Status == PromptStatus.OK ? kwResult.StringResult : "Layer";
+
+                int polyMoved = 0;
+                int textMoved = 0;
+
+                if (mode == "Layer")
+                {
+                    // Layer нэрээр шилжүүлэх
+                    var strOpts = new PromptStringOptions("\n  Area polyline-н layer нэр: ");
+                    strOpts.AllowSpaces = true;
+                    var strResult = ed.GetString(strOpts);
+                    if (strResult.Status != PromptStatus.OK) return;
+                    string areaLayerName = strResult.StringResult.Trim();
+
+                    // Дугаар текстийн layer
+                    var strOpts2 = new PromptStringOptions("\n  Дугаар текстийн layer нэр: ");
+                    strOpts2.AllowSpaces = true;
+                    var strResult2 = ed.GetString(strOpts2);
+                    if (strResult2.Status != PromptStatus.OK) return;
+                    string numLayerName = strResult2.StringResult.Trim();
+
+                    using (var lockDoc = doc.LockDocument())
+                    using (var tr = db.TransactionManager.StartTransaction())
+                    {
+                        var bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
+                        var ms = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead);
+
+                        foreach (ObjectId id in ms)
+                        {
+                            var entity = tr.GetObject(id, OpenMode.ForRead) as Entity;
+                            if (entity == null) continue;
+
+                            // Area polyline шилжүүлэх
+                            if (entity is Polyline pl && pl.Closed && pl.NumberOfVertices >= 3 &&
+                                string.Equals(pl.Layer, areaLayerName, StringComparison.OrdinalIgnoreCase))
+                            {
+                                entity.UpgradeOpen();
+                                entity.Layer = RoomBoundaryService.RoomAreaLayerName;
+                                polyMoved++;
+                            }
+                            // Дугаар текст шилжүүлэх
+                            else if ((entity is DBText || entity is MText) &&
+                                string.Equals(entity.Layer, numLayerName, StringComparison.OrdinalIgnoreCase))
+                            {
+                                entity.UpgradeOpen();
+                                entity.Layer = RoomBoundaryService.RoomNumLayerName;
+                                textMoved++;
+                            }
+                        }
+
+                        tr.Commit();
+                    }
+                }
+                else
+                {
+                    // Polyline-г сонгож шилжүүлэх
+                    ed.WriteMessage("\n  Өрөөний хилийн closed polyline-г сонгоно уу (олноор сонгож болно):");
+                    var selOpts = new PromptSelectionOptions();
+                    selOpts.MessageForAdding = "\n  Polyline сонго: ";
+                    var selResult = ed.GetSelection(selOpts);
+                    if (selResult.Status == PromptStatus.OK)
+                    {
+                        using (var lockDoc = doc.LockDocument())
+                        using (var tr = db.TransactionManager.StartTransaction())
+                        {
+                            foreach (var selObj in selResult.Value)
+                            {
+                                var ent = tr.GetObject(selObj.ObjectId, OpenMode.ForRead) as Entity;
+                                if (ent is Polyline pl && pl.Closed)
+                                {
+                                    ent.UpgradeOpen();
+                                    ent.Layer = RoomBoundaryService.RoomAreaLayerName;
+                                    polyMoved++;
+                                }
+                            }
+                            tr.Commit();
+                        }
+                    }
+
+                    // Дугаар текст сонгох
+                    ed.WriteMessage("\n  Одоо дугаар текстүүдийг сонгоно уу:");
+                    var selResult2 = ed.GetSelection(selOpts);
+                    if (selResult2.Status == PromptStatus.OK)
+                    {
+                        using (var lockDoc = doc.LockDocument())
+                        using (var tr = db.TransactionManager.StartTransaction())
+                        {
+                            foreach (var selObj in selResult2.Value)
+                            {
+                                var ent = tr.GetObject(selObj.ObjectId, OpenMode.ForRead) as Entity;
+                                if (ent is DBText || ent is MText)
+                                {
+                                    ent.UpgradeOpen();
+                                    ent.Layer = RoomBoundaryService.RoomNumLayerName;
+                                    textMoved++;
+                                }
+                            }
+                            tr.Commit();
+                        }
+                    }
+                }
+
+                ed.WriteMessage($"\n\n  Done: {polyMoved} polylines -> {RoomBoundaryService.RoomAreaLayerName}");
+                ed.WriteMessage($"\n        {textMoved} texts -> {RoomBoundaryService.RoomNumLayerName}");
+                ed.WriteMessage($"\n  AutoMatch ажиллуулахад PASS 0 100% зөв тааруулна.");
+            }
+            catch (System.Exception ex)
+            {
+                ed.WriteMessage($"\nАлдаа: {ex.Message}");
+            }
+        }
     }
 }
-
-
-
-
 
 
 
