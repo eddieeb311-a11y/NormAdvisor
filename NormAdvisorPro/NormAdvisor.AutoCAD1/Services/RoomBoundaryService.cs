@@ -508,40 +508,21 @@ namespace NormAdvisor.AutoCAD1.Services
         {
             var ed = doc.Editor;
 
-            double padX = (ext.MaxPoint.X - ext.MinPoint.X) * 0.25;
-            double padY = (ext.MaxPoint.Y - ext.MinPoint.Y) * 0.25;
-            if (padX < 1.0) padX = 1.0;
-            if (padY < 1.0) padY = 1.0;
+            double padX = (ext.MaxPoint.X - ext.MinPoint.X) * 0.15;
+            double padY = (ext.MaxPoint.Y - ext.MinPoint.Y) * 0.15;
+            if (padX < 100.0) padX = 100.0;
+            if (padY < 100.0) padY = 100.0;
 
             double x1 = ext.MinPoint.X - padX;
             double y1 = ext.MinPoint.Y - padY;
             double x2 = ext.MaxPoint.X + padX;
             double y2 = ext.MaxPoint.Y + padY;
 
-            double cx = (x1 + x2) / 2.0;
-            double cy = (y1 + y2) / 2.0;
-            double w = Math.Max(1.0, x2 - x1);
-            double h = Math.Max(1.0, y2 - y1);
-
-            try
-            {
-                using (var view = ed.GetCurrentView())
-                {
-                    view.CenterPoint = new Point2d(cx, cy);
-                    view.Width = w;
-                    view.Height = h;
-                    ed.SetCurrentView(view);
-                }
-                return;
-            }
-            catch
-            {
-            }
-
+            // ZOOM _W (Window) — хамгийн найдвартай арга
             var ci = System.Globalization.CultureInfo.InvariantCulture;
-            string center = string.Format(ci, "{0:F2},{1:F2}", cx, cy);
-            string height = string.Format(ci, "{0:F2}", Math.Max(w, h));
-            doc.SendStringToExecute($"_.ZOOM _C {center} {height}\n", false, false, false);
+            string corner1 = string.Format(ci, "{0:F2},{1:F2}", x1, y1);
+            string corner2 = string.Format(ci, "{0:F2},{1:F2}", x2, y2);
+            doc.SendStringToExecute($"_.ZOOM _W {corner1} {corner2}\n", false, false, false);
         }
 
         private void SaveVirtualBoundary(RoomInfo room, List<Point2d> points)
