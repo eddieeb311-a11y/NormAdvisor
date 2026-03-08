@@ -453,12 +453,14 @@ namespace NormAdvisor.AutoCAD1.Services
 
             try
             {
+                // 1. Virtual boundary кэш (хамгийн найдвартай - block болсон ч ажиллана)
                 if (TryGetVirtualBoundary(roomId, roomNumber, out Extents3d virtualExt))
                 {
                     ZoomByExtents(doc, virtualExt);
                     return;
                 }
 
+                // 2. Model space дээрх polyline-г шууд олох
                 ObjectId targetId = polylineId;
                 if (!string.IsNullOrWhiteSpace(roomId))
                 {
@@ -466,7 +468,6 @@ namespace NormAdvisor.AutoCAD1.Services
                     if (foundById.TryGetValue(roomId, out ObjectId idByRoomId) && idByRoomId != ObjectId.Null)
                         targetId = idByRoomId;
 
-                    // Compatibility fallback: "#N{number}:{name}" key.
                     if ((targetId == ObjectId.Null || !targetId.IsValid) &&
                         TryParseCompositeRoomKey(roomId, out int n, out string namePart))
                     {
@@ -481,22 +482,103 @@ namespace NormAdvisor.AutoCAD1.Services
                         targetId = xId;
                 }
 
-                if (targetId == ObjectId.Null || !targetId.IsValid)
+                // 3. Model space polyline олдвол zoom
+                if (targetId != ObjectId.Null && targetId.IsValid)
                 {
-                    ed.WriteMessage("\n  Polyline not found.");
-                    return;
+                    try
+                    {
+                        using (var tr = db.TransactionManager.StartTransaction())
+                        {
+                            var entity = (Entity)tr.GetObject(targetId, OpenMode.ForRead);
+                            var ext = entity.GeometricExtents;
+                            tr.Commit();
+                            try { ed.SetImpliedSelection(new ObjectId[] { targetId }); } catch { }
+                            ZoomByExtents(doc, ext);
+                            return;
+                        }
+                    }
+                    catch { /* polyline block дотор орсон байж магадгүй */ }
                 }
 
-                Extents3d ext;
+                // 4. Block дотроос XData-р хайх fallback
                 using (var tr = db.TransactionManager.StartTransaction())
                 {
-                    var entity = (Entity)tr.GetObject(targetId, OpenMode.ForRead);
-                    ext = entity.GeometricExtents;
+                    var bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
+                    var ms = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead);
+
+                    foreach (ObjectId id in ms)
+                    {
+                        var ent = tr.GetObject(id, OpenMode.ForRead) as BlockReference;
+                        if (ent == null) continue;
+
+                        // Block дотор NORMADVISOR XData-тай polyline хайх
+                        var btr = tr.GetObject(ent.BlockTableRecord, OpenMode.ForRead) as BlockTableRecord;
+                        if (btr == null) continue;
+
+                        foreach (ObjectId subId in btr)
+                        {
+                            Entity subEnt;
+                            try { subEnt = tr.GetObject(subId, OpenMode.ForRead) as Entity; }
+                            catch { continue; }
+                            if (subEnt == null) continue;
+
+                            var xdata = ReadXData(subEnt);
+                            if (xdata == null) continue;
+
+                            bool match = false;
+                            if (!string.IsNullOrWhiteSpace(roomId) &&
+                                string.Equals(xdata.RoomId, roomId, StringComparison.OrdinalIgnoreCase))
+                                match = true;
+                            else if (roomNumber > 0 && xdata.Number == roomNumber)
+                                match = true;
+
+                            if (match)
+                            {
+                                // BlockReference-н extents руу zoom
+                                var blkExt = ent.GeometricExtents;
+                                tr.Commit();
+
+                                // Polyline-н координатыг block transform-р хувиргаж нарийн zoom
+                                if (subEnt is Polyline pl)
+                                {
+                                    var xform = ent.BlockTransform;
+                                    var minPt = new Point3d(double.MaxValue, double.MaxValue, 0);
+                                    var maxPt = new Point3d(double.MinValue, double.MinValue, 0);
+                                    for (int i = 0; i < pl.NumberOfVertices; i++)
+                                    {
+                                        var pt = pl.GetPoint3dAt(i).TransformBy(xform);
+                                        if (pt.X < minPt.X) minPt = new Point3d(pt.X, minPt.Y, 0);
+                                        if (pt.Y < minPt.Y) minPt = new Point3d(minPt.X, pt.Y, 0);
+                                        if (pt.X > maxPt.X) maxPt = new Point3d(pt.X, maxPt.Y, 0);
+                                        if (pt.Y > maxPt.Y) maxPt = new Point3d(maxPt.X, pt.Y, 0);
+                                    }
+                                    var polyExt = new Extents3d(minPt, maxPt);
+
+                                    // Кэшлэх
+                                    var pts = new List<Point2d>();
+                                    for (int i = 0; i < pl.NumberOfVertices; i++)
+                                    {
+                                        var pt = pl.GetPoint3dAt(i).TransformBy(xform);
+                                        pts.Add(new Point2d(pt.X, pt.Y));
+                                    }
+                                    var fakeRoom = new RoomInfo { Number = roomNumber, RoomId = roomId ?? "" };
+                                    SaveVirtualBoundary(fakeRoom, pts);
+
+                                    ZoomByExtents(doc, polyExt);
+                                }
+                                else
+                                {
+                                    ZoomByExtents(doc, blkExt);
+                                }
+                                return;
+                            }
+                        }
+                    }
+
                     tr.Commit();
                 }
 
-                try { ed.SetImpliedSelection(new ObjectId[] { targetId }); } catch { }
-                ZoomByExtents(doc, ext);
+                ed.WriteMessage("\n  Zoom: polyline олдсонгүй.");
             }
             catch (System.Exception ex)
             {
@@ -1261,10 +1343,11 @@ namespace NormAdvisor.AutoCAD1.Services
             ObjectId resultPolyId;
             double area;
 
+            // Бүх тохиолдолд virtual boundary хадгалах (block болсон ч zoom ажиллана)
+            SaveVirtualBoundary(room, poly.Points);
+
             if (poly.IsFromBlock)
             {
-                // Virtual boundary mode: no extra polyline creation.
-                SaveVirtualBoundary(room, poly.Points);
                 resultPolyId = poly.ObjectId;
                 area = poly.Area / areaScale;
             }
