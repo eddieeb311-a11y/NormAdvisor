@@ -1,0 +1,89 @@
+{
+  "categories": [
+    {
+      "name": "Галын дохиолол",
+      "icon": "🔥",
+      "dwgFile": "Fire devices.dwg",
+      "blockName": "Fire devices",
+      "devices": [
+        { "name": "Дулааны мэдрэгч", "visibilityState": "Heat detector", "tagPrefix": "TD" },
+        { "name": "Утааны мэдрэгч", "visibilityState": "Smoke detector", "tagPrefix": "SZ" },
+        { "name": "Шугаман мэдрэгч (хүлээн авагч)", "visibilityState": "Line detector(Receiver)", "tagPrefix": "LR" },
+        { "name": "Шугаман мэдрэгч (дамжуулагч)", "visibilityState": "Line detector(Transmitter)", "tagPrefix": "LT" },
+        { "name": "Дуут дохиолол (Сирен)", "visibilityState": "Siren", "tagPrefix": "SI" },
+        { "name": "Гар мэдээлэгч (MCP)", "visibilityState": "MCP", "tagPrefix": "F" }
+      ]
+    },
+    {
+      "name": "Камерын систем (CCTV)",
+      "icon": "📷",
+      "dwgFile": "Camera system.dwg",
+      "blockName": "Camera system",
+      "devices": [
+        { "name": "Дотоод камер", "visibilityState": "Indoor Camera", "tagPrefix": "K" },
+        { "name": "Гадна камер", "visibilityState": "Outdoor camera", "tagPrefix": "GK" }
+      ]
+    },
+    {
+      "name": "Телефон / LAN / IPTV",
+      "icon": "☎️",
+      "dwgFile": "Tel+Lan+IPTV.dwg",
+      "blockName": "Tel+Lan+IPTV",
+      "devices": [
+        { "name": "Tel+Lan+IPTV (ханан дээр)", "visibilityState": "Tel+Lan+IPtv/Wall", "tagPrefix": "A" },
+        { "name": "Tel+Lan (ханан дээр)", "visibilityState": "Tel+Lan/Wall", "tagPrefix": "A" },
+        { "name": "Tel+IPTV (ханан дээр)", "visibilityState": "Tel+IPtv/Wall", "tagPrefix": "A" },
+        { "name": "Tel+Lan (шалан дээр)", "visibilityState": "Tel+Lan/Floor", "tagPrefix": "A" },
+        { "name": "LAN (ханан дээр)", "visibilityState": "Lan/Wall", "tagPrefix": "LAN" },
+        { "name": "Телефон (ханан дээр)", "visibilityState": "Tel/Wall", "tagPrefix": "TEL" },
+        { "name": "IPTV (ханан дээр)", "visibilityState": "Iptv/Wall", "tagPrefix": "IPTV" },
+        { "name": "LAN (шалан дээр)", "visibilityState": "Lan/Floor", "tagPrefix": "LAN" },
+        { "name": "Телефон (шалан дээр)", "visibilityState": "Tell/Floor", "tagPrefix": "TEL" },
+        { "name": "Access Point (AP)", "visibilityState": "AP", "tagPrefix": "AP" }
+      ]
+    },
+    {
+      "name": "Зарлан мэдээлэх (PA)",
+      "icon": "📢",
+      "dwgFile": "Public Address System devices .dwg",
+      "blockName": "Public Address System devices",
+      "devices": [
+        { "name": "Таазны чанга яригч", "visibilityState": "Ceilling speaker", "tagPrefix": "Z" },
+        { "name": "Ханын чанга яригч", "visibilityState": "Wall speaker", "tagPrefix": "Z" }
+      ]
+    },
+    {
+      "name": "УБ Мэдээлэл Холбоо",
+      "icon": "📡",
+      "dwgFile": "UB Medeelel Holboo.dwg",
+      "blockName": "UB Medeelel Holboo",
+      "devices": [
+        { "name": "MDU УБ", "visibilityState": "MDU UB", "tagPrefix": "MDU" },
+        { "name": "SW-4 УБ", "visibilityState": "SW-4 UB", "tagPrefix": "SW" },
+        { "name": "NVR УБ", "visibilityState": "NVR UB", "tagPrefix": "NVR" },
+        { "name": "PoE SW 8p УБ", "visibilityState": "PoE SW 8p UB", "tagPrefix": "POE" },
+        { "name": "PoE SW 16p УБ", "visibilityState": "PoE SW 16p UB", "tagPrefix": "POE" },
+        { "name": "PoE SW 24p УБ", "visibilityState": "PoE SW 24p UB", "tagPrefix": "POE" },
+        { "name": "ONU УБ", "visibilityState": "ONU UB", "tagPrefix": "ONU" },
+        { "name": "OLT УБ", "visibilityState": "OLT UB", "tagPrefix": "OLT" },
+        { "name": "FDF УБ", "visibilityState": "FDF UB", "tagPrefix": "FDF" },
+        { "name": "Splitter 1:4 УБ", "visibilityState": "Splitter 1.4 UB", "tagPrefix": "SPL" },
+        { "name": "Splitter 1:8 УБ", "visibilityState": "Splitter 1.8 UB", "tagPrefix": "SPL" },
+        { "name": "Splitter 1:16 УБ", "visibilityState": "Splitter 1.16 UB", "tagPrefix": "SPL" },
+        { "name": "Splitter 1:32 УБ", "visibilityState": "Splitter 1.32 UB", "tagPrefix": "SPL" },
+        { "name": "FACP УБ", "visibilityState": "FACP UB", "tagPrefix": "FACP" },
+        { "name": "Repeater Panel УБ", "visibilityState": "Repeater Panel UB", "tagPrefix": "RP" },
+        { "name": "NAC УБ", "visibilityState": "NAC UB", "tagPrefix": "NAC" },
+        { "name": "UPS УБ", "visibilityState": "UPS UB", "tagPrefix": "UPS" },
+        { "name": "Battery УБ", "visibilityState": "Battery UB", "tagPrefix": "BAT" },
+        { "name": "Amplifier УБ", "visibilityState": "Amplifier UB", "tagPrefix": "AMP" },
+        { "name": "Telephone PABX УБ", "visibilityState": "Telephone PABX UB", "tagPrefix": "PABX" },
+        { "name": "Router УБ", "visibilityState": "Router UB", "tagPrefix": "RTR" },
+        { "name": "Server УБ", "visibilityState": "Server UB", "tagPrefix": "SRV" },
+        { "name": "Rack Cabinet 19\" УБ", "visibilityState": "Rack Cabinet 19 UB", "tagPrefix": "RACK" },
+        { "name": "Patch Panel УБ", "visibilityState": "Patch Panel UB", "tagPrefix": "PP" },
+        { "name": "Intercom outdoor УБ", "visibilityState": "Intercom outdoor UB", "tagPrefix": "ICO" }
+      ]
+    }
+  ]
+}

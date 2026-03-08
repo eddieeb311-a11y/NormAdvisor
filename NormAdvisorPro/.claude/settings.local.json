@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet build NormSchematicStudio/NormSchematicStudio.csproj)",
+      "Bash(git config --global --add safe.directory 'C:/Users/Byamba Erdene/Desktop/Norm/NormAdvisorPro')"
+    ]
+  }
+}

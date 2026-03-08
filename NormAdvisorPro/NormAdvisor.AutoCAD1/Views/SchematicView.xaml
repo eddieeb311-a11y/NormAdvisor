@@ -1,0 +1,48 @@
+﻿<UserControl x:Class="NormAdvisor.AutoCAD1.Views.SchematicView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <UserControl.Resources>
+        <ResourceDictionary Source="Styles/NormStyles.xaml" />
+    </UserControl.Resources>
+
+    <Grid Margin="10" Background="{StaticResource BgDarkBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0"
+                   Text="Угсралтын бүдүүвч"
+                   Style="{StaticResource NormLabel}" />
+
+        <Button Grid.Row="1"
+                Style="{StaticResource NormButton}"
+                Content="5 давхар x 10 LAN загвар зурах"
+                Margin="0,8,0,0"
+                Command="{Binding DrawLanPrototypeCommand}" />
+
+        <Border Grid.Row="2"
+                Background="{StaticResource BgLightBrush}"
+                CornerRadius="6"
+                Padding="10"
+                Margin="0,10,0,0">
+            <TextBlock Text="Энэ таб-аас угсралтын бүдүүвч prototype-уудыг ажиллуулна. Дараа нь стандарт блок, хүснэгт, pagination-тай болгоно."
+                       Foreground="{StaticResource TextSecondaryBrush}"
+                       TextWrapping="Wrap" />
+        </Border>
+
+        <Border Grid.Row="3"
+                Background="{StaticResource BgLightBrush}"
+                CornerRadius="0,0,4,4"
+                Padding="10,6"
+                Margin="0,8,0,0">
+            <TextBlock Text="{Binding StatusText}"
+                       Foreground="{StaticResource TextSecondaryBrush}"
+                       FontSize="11" />
+        </Border>
+    </Grid>
+</UserControl>
+

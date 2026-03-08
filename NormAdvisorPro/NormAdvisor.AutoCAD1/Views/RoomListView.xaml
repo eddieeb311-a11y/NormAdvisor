@@ -1,0 +1,209 @@
+﻿<UserControl x:Class="NormAdvisor.AutoCAD1.Views.RoomListView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <UserControl.Resources>
+        <ResourceDictionary Source="Styles/NormStyles.xaml" />
+    </UserControl.Resources>
+
+    <Grid Margin="10" Background="{StaticResource BgDarkBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBox Grid.Row="0"
+                 Style="{StaticResource NormTextBox}"
+                 Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                 Tag="Хайх..."
+                 Margin="0,0,0,8" />
+
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,8">
+            <Button Style="{StaticResource NormButton}"
+                    Content="Table-ээс унших"
+                    Command="{Binding ReadFromTableCommand}"
+                    Margin="0,0,6,0" />
+            <Button Style="{StaticResource NormButton}"
+                    Content="Бүсээс унших"
+                    Command="{Binding ReadFromRegionCommand}"
+                    Margin="0,0,6,0" />
+            <Button Style="{StaticResource NormAccentButton}"
+                    Content="Авто таних"
+                    Command="{Binding AutoMatchCommand}"
+                    ToolTip="Өрөөний хүрээ автоматаар таньж холбоно" />
+        </StackPanel>
+
+        <Border Grid.Row="2"
+                CornerRadius="4"
+                Padding="8,5"
+                Margin="0,0,0,8">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="Background" Value="{StaticResource BgLightBrush}" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsMasterLocked}" Value="True">
+                            <Setter Property="Background" Value="#1A66BB6A" />
+                            <Setter Property="BorderBrush" Value="#66BB6A" />
+                            <Setter Property="BorderThickness" Value="1" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <TextBlock Grid.Column="0"
+                           VerticalAlignment="Center"
+                           FontSize="11">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Text" Value="Мастер тодорхойлоогүй" />
+                            <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsMasterLocked}" Value="True">
+                                    <Setter Property="Text" Value="{Binding MasterStatusText}" />
+                                    <Setter Property="Foreground" Value="#66BB6A" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+
+                <Button Grid.Column="1"
+                        Style="{StaticResource NormIconButton}"
+                        Content="&#8635;"
+                        FontSize="14"
+                        Command="{Binding RefreshCopiesCommand}"
+                        ToolTip="Хуулбар шинэчлэх"
+                        Margin="4,0">
+                    <Button.Visibility>
+                        <Binding Path="IsMasterLocked">
+                            <Binding.Converter>
+                                <BooleanToVisibilityConverter />
+                            </Binding.Converter>
+                        </Binding>
+                    </Button.Visibility>
+                </Button>
+
+                <Button Grid.Column="2"
+                        Command="{Binding ToggleMasterLockCommand}"
+                        Cursor="Hand"
+                        ToolTip="Мастер Lock / Unlock">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource NormSmallButton}">
+                            <Setter Property="Content" Value="Lock" />
+                            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsMasterLocked}" Value="True">
+                                    <Setter Property="Content" Value="Unlock" />
+                                    <Setter Property="Foreground" Value="#FFA726" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
+            </Grid>
+        </Border>
+
+        <DataGrid Grid.Row="3"
+                  Style="{StaticResource NormDataGrid}"
+                  ItemsSource="{Binding RoomsView}"
+                  SelectedItem="{Binding SelectedRoom}"
+                  ColumnHeaderStyle="{StaticResource NormColumnHeader}"
+                  RowStyle="{StaticResource NormDataGridRow}">
+            <DataGrid.Columns>
+                <DataGridTemplateColumn Header="" Width="18" IsReadOnly="True">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <Ellipse Width="8" Height="8"
+                                     HorizontalAlignment="Center"
+                                     VerticalAlignment="Center">
+                                <Ellipse.Style>
+                                    <Style TargetType="Ellipse">
+                                        <Setter Property="Fill" Value="#44EF5350" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding HasBoundary}" Value="True">
+                                                <Setter Property="Fill" Value="#66BB6A" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Ellipse.Style>
+                            </Ellipse>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
+                <DataGridTextColumn Header="#" Binding="{Binding RoomId}" Width="40" IsReadOnly="True" />
+                <DataGridTextColumn Header="Нэр" Binding="{Binding Name}" Width="*" IsReadOnly="True" />
+                <DataGridTextColumn Header="м2" Binding="{Binding Area, StringFormat={}{0:F1}}" Width="52" IsReadOnly="True" />
+
+                <DataGridTemplateColumn Header="Бод" Width="56" IsReadOnly="True">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock HorizontalAlignment="Right"
+                                       VerticalAlignment="Center"
+                                       Foreground="#4FC3F7"
+                                       FontSize="11">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Text" Value="{Binding DrawnArea, StringFormat={}{0:F1}}" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding HasBoundary}" Value="False">
+                                                <Setter Property="Text" Value="" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
+                <DataGridTemplateColumn Header="" Width="40" IsReadOnly="True">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center"
+                                        VerticalAlignment="Center">
+                                <Button Style="{StaticResource NormIconButton}"
+                                        Content="&#9998;"
+                                        Command="{Binding DataContext.DrawBoundaryCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                        ToolTip="Хүрээ зурах" />
+                                <Button Content="&#8982;"
+                                        Command="{Binding DataContext.ZoomToRoomCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                        ToolTip="Томруулах">
+                                    <Button.Style>
+                                        <Style TargetType="Button" BasedOn="{StaticResource NormIconButton}">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding HasBoundary}" Value="False">
+                                                    <Setter Property="Visibility" Value="Hidden" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
+                            </StackPanel>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <Border Grid.Row="4"
+                Background="{StaticResource BgLightBrush}"
+                CornerRadius="0,0,4,4"
+                Padding="10,6"
+                Margin="0,4,0,0">
+            <TextBlock Text="{Binding StatusText}"
+                       Foreground="{StaticResource TextSecondaryBrush}"
+                       FontSize="11" />
+        </Border>
+    </Grid>
+</UserControl>
+
