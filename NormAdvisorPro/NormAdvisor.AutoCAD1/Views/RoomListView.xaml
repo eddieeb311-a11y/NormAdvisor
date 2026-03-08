@@ -21,19 +21,33 @@
                  Tag="Хайх..."
                  Margin="0,0,0,8" />
 
-        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,8">
-            <Button Style="{StaticResource NormButton}"
-                    Content="Table-ээс унших"
-                    Command="{Binding ReadFromTableCommand}"
-                    Margin="0,0,6,0" />
-            <Button Style="{StaticResource NormButton}"
-                    Content="Бүсээс унших"
-                    Command="{Binding ReadFromRegionCommand}"
-                    Margin="0,0,6,0" />
-            <Button Style="{StaticResource NormAccentButton}"
-                    Content="Авто таних"
-                    Command="{Binding AutoMatchCommand}"
-                    ToolTip="Өрөөний хүрээ автоматаар таньж холбоно" />
+        <StackPanel Grid.Row="1" Margin="0,0,0,8">
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                <Button Style="{StaticResource NormButton}"
+                        Content="Table-ээс унших"
+                        Command="{Binding ReadFromTableCommand}"
+                        Margin="0,0,6,0" />
+                <Button Style="{StaticResource NormButton}"
+                        Content="Бүсээс унших"
+                        Command="{Binding ReadFromRegionCommand}"
+                        Margin="0,0,6,0" />
+                <Button Style="{StaticResource NormAccentButton}"
+                        Content="Авто таних"
+                        Command="{Binding AutoMatchCommand}"
+                        ToolTip="Өрөөний хүрээ автоматаар таньж холбоно" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal">
+                <Button Style="{StaticResource NormButton}"
+                        Content="Сонголтоос"
+                        Command="{Binding MatchFromSelectionCommand}"
+                        ToolTip="Сонгосон polyline-г өрөөний хилээр таних (Ctrl+A гээд дар)"
+                        Margin="0,0,6,0" />
+                <Button Style="{StaticResource NormButton}"
+                        Content="Layer-с"
+                        Command="{Binding MatchFromLayerCommand}"
+                        ToolTip="Layer нэр оруулахад тэр layer-н бүх polyline-г таних"
+                        Margin="0,0,6,0" />
+            </StackPanel>
         </StackPanel>
 
         <Border Grid.Row="2"

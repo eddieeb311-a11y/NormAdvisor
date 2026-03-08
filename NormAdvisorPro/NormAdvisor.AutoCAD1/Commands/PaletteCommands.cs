@@ -1594,8 +1594,9 @@ namespace NormAdvisor.AutoCAD1.Commands
                         using (var lockDoc = doc.LockDocument())
                         using (var tr = db.TransactionManager.StartTransaction())
                         {
-                            foreach (var selObj in selResult.Value)
+                            foreach (SelectedObject selObj in selResult.Value)
                             {
+                                if (selObj == null) continue;
                                 var ent = tr.GetObject(selObj.ObjectId, OpenMode.ForRead) as Entity;
                                 if (ent is Polyline pl && pl.Closed)
                                 {
@@ -1616,8 +1617,9 @@ namespace NormAdvisor.AutoCAD1.Commands
                         using (var lockDoc = doc.LockDocument())
                         using (var tr = db.TransactionManager.StartTransaction())
                         {
-                            foreach (var selObj in selResult2.Value)
+                            foreach (SelectedObject selObj in selResult2.Value)
                             {
+                                if (selObj == null) continue;
                                 var ent = tr.GetObject(selObj.ObjectId, OpenMode.ForRead) as Entity;
                                 if (ent is DBText || ent is MText)
                                 {
@@ -1639,6 +1641,267 @@ namespace NormAdvisor.AutoCAD1.Commands
             {
                 ed.WriteMessage($"\nАлдаа: {ex.Message}");
             }
+        }
+        /// <summary>
+        /// NORMMATCHSELECTION — AutoCAD дээр сонгогдсон entity-г
+        /// NORM layer руу шилжүүлж, AutoMatch (PASS 0) ажиллуулна.
+        /// Хэрэглэгч Ctrl+A эсвэл гараар сонгосны дараа товч дарна.
+        /// </summary>
+        [CommandMethod("NORMMATCHSELECTION")]
+        public void MatchFromSelection()
+        {
+            var doc = Application.DocumentManager.MdiActiveDocument;
+            var ed = doc.Editor;
+
+            try
+            {
+                var vm = RoomListViewModel.Current;
+                if (vm == null) { ed.WriteMessage("\nПалетт нээгдээгүй."); return; }
+                var rooms = vm.GetAllRooms();
+                if (rooms.Count == 0) { ed.WriteMessage("\nӨрөөний жагсаалт хоосон."); return; }
+
+                // Implied selection авах (аль хэдийн сонгогдсон entity)
+                var selResult = ed.SelectImplied();
+                if (selResult.Status != PromptStatus.OK || selResult.Value.Count == 0)
+                {
+                    // Сонголт байхгүй бол шинээр сонгуулах
+                    ed.WriteMessage("\nӨрөөний хилийн polyline + дугаар текстийг сонгоно уу:");
+                    var selOpts = new PromptSelectionOptions();
+                    selResult = ed.GetSelection(selOpts);
+                    if (selResult.Status != PromptStatus.OK) return;
+                }
+
+                var db = doc.Database;
+                int polyMoved = 0;
+                int textMoved = 0;
+
+                using (var lockDoc = doc.LockDocument())
+                using (var tr = db.TransactionManager.StartTransaction())
+                {
+                    var service = new RoomBoundaryService();
+                    service.EnsureNormLayers(db, tr);
+
+                    // Эхлээд closed polyline-г цуглуулж NORM_ROOM_AREA руу шилжүүлэх
+                    var movedPolys = new System.Collections.Generic.List<Polyline>();
+
+                    foreach (SelectedObject selObj in selResult.Value)
+                    {
+                        if (selObj == null) continue;
+                        var ent = tr.GetObject(selObj.ObjectId, OpenMode.ForRead) as Entity;
+                        if (ent == null) continue;
+
+                        if (ent is Polyline pl && pl.Closed && pl.NumberOfVertices >= 3)
+                        {
+                            ent.UpgradeOpen();
+                            ent.Layer = RoomBoundaryService.RoomAreaLayerName;
+                            movedPolys.Add(pl);
+                            polyMoved++;
+                        }
+                    }
+
+                    // Polyline дотор байгаа текстийг олж NORM_ROOM_NUM руу шилжүүлэх
+                    var bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
+                    var ms = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead);
+
+                    foreach (ObjectId id in ms)
+                    {
+                        var entity = tr.GetObject(id, OpenMode.ForRead) as Entity;
+                        if (entity == null) continue;
+                        if (!(entity is DBText || entity is MText)) continue;
+
+                        Autodesk.AutoCAD.Geometry.Point2d textPos;
+                        if (entity is DBText dt)
+                            textPos = new Autodesk.AutoCAD.Geometry.Point2d(dt.Position.X, dt.Position.Y);
+                        else
+                        {
+                            var mt = (MText)entity;
+                            textPos = new Autodesk.AutoCAD.Geometry.Point2d(mt.Location.X, mt.Location.Y);
+                        }
+
+                        // Текст аль нэг шилжүүлсэн polyline дотор байгаа эсэхийг шалгах
+                        foreach (var pl in movedPolys)
+                        {
+                            var pts = new System.Collections.Generic.List<Autodesk.AutoCAD.Geometry.Point2d>();
+                            for (int i = 0; i < pl.NumberOfVertices; i++)
+                                pts.Add(pl.GetPoint2dAt(i));
+
+                            if (IsPointInPoly(textPos, pts))
+                            {
+                                entity.UpgradeOpen();
+                                entity.Layer = RoomBoundaryService.RoomNumLayerName;
+                                textMoved++;
+                                break;
+                            }
+                        }
+                    }
+
+                    tr.Commit();
+                }
+
+                ed.WriteMessage($"\n  {polyMoved} polyline -> {RoomBoundaryService.RoomAreaLayerName}");
+                ed.WriteMessage($"\n  {textMoved} text -> {RoomBoundaryService.RoomNumLayerName}");
+
+                if (polyMoved > 0)
+                {
+                    // Бүх boundary цэвэрлээд AutoMatch ажиллуулах
+                    foreach (var room in rooms)
+                    {
+                        room.BoundaryId = ObjectId.Null;
+                        room.DrawnArea = 0;
+                    }
+
+                    var svc = new RoomBoundaryService();
+                    var results = svc.AutoMatchBoundaries(rooms);
+                    ed.WriteMessage($"\n  === {results.Count}/{rooms.Count} matched ===");
+                    vm.OnAutoMatchCompleted(results);
+                }
+            }
+            catch (System.Exception ex)
+            {
+                ed.WriteMessage($"\nАлдаа: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// NORMMATCHLAYER — Layer нэр оруулахад тэр layer-н бүх closed polyline-г
+        /// NORM layer руу шилжүүлж, AutoMatch ажиллуулна.
+        /// </summary>
+        [CommandMethod("NORMMATCHLAYER")]
+        public void MatchFromLayer()
+        {
+            var doc = Application.DocumentManager.MdiActiveDocument;
+            var ed = doc.Editor;
+
+            try
+            {
+                var vm = RoomListViewModel.Current;
+                if (vm == null) { ed.WriteMessage("\nПалетт нээгдээгүй."); return; }
+                var rooms = vm.GetAllRooms();
+                if (rooms.Count == 0) { ed.WriteMessage("\nӨрөөний жагсаалт хоосон."); return; }
+
+                // Layer нэр авах
+                var strOpts = new PromptStringOptions("\nӨрөөний polyline-н layer нэр: ");
+                strOpts.AllowSpaces = true;
+                var strResult = ed.GetString(strOpts);
+                if (strResult.Status != PromptStatus.OK) return;
+                string targetLayer = strResult.StringResult.Trim();
+
+                if (string.IsNullOrEmpty(targetLayer))
+                {
+                    ed.WriteMessage("\nLayer нэр хоосон байна.");
+                    return;
+                }
+
+                var db = doc.Database;
+                int polyMoved = 0;
+                int textMoved = 0;
+
+                using (var lockDoc = doc.LockDocument())
+                using (var tr = db.TransactionManager.StartTransaction())
+                {
+                    var service = new RoomBoundaryService();
+                    service.EnsureNormLayers(db, tr);
+
+                    var bt = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForRead);
+                    var ms = (BlockTableRecord)tr.GetObject(bt[BlockTableRecord.ModelSpace], OpenMode.ForRead);
+
+                    // Тухайн layer дээрх closed polyline-г NORM_ROOM_AREA руу шилжүүлэх
+                    var movedPolys = new System.Collections.Generic.List<Polyline>();
+
+                    foreach (ObjectId id in ms)
+                    {
+                        var entity = tr.GetObject(id, OpenMode.ForRead) as Entity;
+                        if (entity == null) continue;
+
+                        if (entity is Polyline pl && pl.Closed && pl.NumberOfVertices >= 3 &&
+                            string.Equals(pl.Layer, targetLayer, StringComparison.OrdinalIgnoreCase))
+                        {
+                            entity.UpgradeOpen();
+                            entity.Layer = RoomBoundaryService.RoomAreaLayerName;
+                            movedPolys.Add(pl);
+                            polyMoved++;
+                        }
+                    }
+
+                    // Polyline дотор байгаа текстийг олж NORM_ROOM_NUM руу шилжүүлэх
+                    foreach (ObjectId id in ms)
+                    {
+                        var entity = tr.GetObject(id, OpenMode.ForRead) as Entity;
+                        if (entity == null) continue;
+                        if (!(entity is DBText || entity is MText)) continue;
+
+                        Autodesk.AutoCAD.Geometry.Point2d textPos;
+                        if (entity is DBText dt)
+                            textPos = new Autodesk.AutoCAD.Geometry.Point2d(dt.Position.X, dt.Position.Y);
+                        else
+                        {
+                            var mt = (MText)entity;
+                            textPos = new Autodesk.AutoCAD.Geometry.Point2d(mt.Location.X, mt.Location.Y);
+                        }
+
+                        foreach (var pl in movedPolys)
+                        {
+                            var pts = new System.Collections.Generic.List<Autodesk.AutoCAD.Geometry.Point2d>();
+                            for (int i = 0; i < pl.NumberOfVertices; i++)
+                                pts.Add(pl.GetPoint2dAt(i));
+
+                            if (IsPointInPoly(textPos, pts))
+                            {
+                                entity.UpgradeOpen();
+                                entity.Layer = RoomBoundaryService.RoomNumLayerName;
+                                textMoved++;
+                                break;
+                            }
+                        }
+                    }
+
+                    tr.Commit();
+                }
+
+                ed.WriteMessage($"\n  {polyMoved} polyline -> {RoomBoundaryService.RoomAreaLayerName}");
+                ed.WriteMessage($"\n  {textMoved} text -> {RoomBoundaryService.RoomNumLayerName}");
+
+                if (polyMoved > 0)
+                {
+                    foreach (var room in rooms)
+                    {
+                        room.BoundaryId = ObjectId.Null;
+                        room.DrawnArea = 0;
+                    }
+
+                    var svc = new RoomBoundaryService();
+                    var results = svc.AutoMatchBoundaries(rooms);
+                    ed.WriteMessage($"\n  === {results.Count}/{rooms.Count} matched ===");
+                    vm.OnAutoMatchCompleted(results);
+                }
+                else
+                {
+                    ed.WriteMessage($"\n  \"{targetLayer}\" layer дээр closed polyline олдсонгүй.");
+                }
+            }
+            catch (System.Exception ex)
+            {
+                ed.WriteMessage($"\nАлдаа: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Point-in-polygon helper (ray casting)
+        /// </summary>
+        private static bool IsPointInPoly(Autodesk.AutoCAD.Geometry.Point2d pt, System.Collections.Generic.List<Autodesk.AutoCAD.Geometry.Point2d> poly)
+        {
+            bool inside = false;
+            int j = poly.Count - 1;
+            for (int i = 0; i < poly.Count; i++)
+            {
+                if ((poly[i].Y > pt.Y) != (poly[j].Y > pt.Y) &&
+                    pt.X < (poly[j].X - poly[i].X) * (pt.Y - poly[i].Y) / (poly[j].Y - poly[i].Y) + poly[i].X)
+                {
+                    inside = !inside;
+                }
+                j = i;
+            }
+            return inside;
         }
     }
 }

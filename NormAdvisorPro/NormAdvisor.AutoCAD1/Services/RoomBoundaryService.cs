@@ -358,6 +358,38 @@ namespace NormAdvisor.AutoCAD1.Services
         /// <summary>
         /// Entity Ð´ÑÑÑ€ Ó©Ñ€Ó©Ó©Ð½Ð¸Ð¹ XData Ñ…Ð°Ð´Ð³Ð°Ð»Ð°Ñ…
         /// </summary>
+        /// <summary>
+        /// NORM_ROOM_AREA, NORM_ROOM_NUM layer-г үүсгэх (public)
+        /// </summary>
+        public void EnsureNormLayers(Database db, Transaction tr)
+        {
+            var layerTable = (LayerTable)tr.GetObject(db.LayerTableId, OpenMode.ForRead);
+
+            if (!layerTable.Has(RoomAreaLayerName))
+            {
+                layerTable.UpgradeOpen();
+                var layer = new LayerTableRecord
+                {
+                    Name = RoomAreaLayerName,
+                    Color = Color.FromColorIndex(ColorMethod.ByAci, 30)
+                };
+                layerTable.Add(layer);
+                tr.AddNewlyCreatedDBObject(layer, true);
+            }
+
+            if (!layerTable.Has(RoomNumLayerName))
+            {
+                if (!layerTable.IsWriteEnabled) layerTable.UpgradeOpen();
+                var layer = new LayerTableRecord
+                {
+                    Name = RoomNumLayerName,
+                    Color = Color.FromColorIndex(ColorMethod.ByAci, 1)
+                };
+                layerTable.Add(layer);
+                tr.AddNewlyCreatedDBObject(layer, true);
+            }
+        }
+
         private void AttachXData(Entity entity, Transaction tr, Database db, RoomInfo room)
         {
             entity.XData = new ResultBuffer(

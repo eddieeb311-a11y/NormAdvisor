@@ -42,6 +42,8 @@ namespace NormAdvisor.AutoCAD1.ViewModels
             ToggleMasterLockCommand = new RelayCommand(ToggleMasterLock);
             RefreshCopiesCommand = new RelayCommand(RefreshCopies);
             AutoMatchCommand = new RelayCommand(AutoMatch);
+            MatchFromSelectionCommand = new RelayCommand(MatchFromSelection);
+            MatchFromLayerCommand = new RelayCommand(MatchFromLayer);
         }
 
         public ICollectionView RoomsView => _roomsView;
@@ -109,6 +111,8 @@ namespace NormAdvisor.AutoCAD1.ViewModels
         public ICommand ToggleMasterLockCommand { get; }
         public ICommand RefreshCopiesCommand { get; }
         public ICommand AutoMatchCommand { get; }
+        public ICommand MatchFromSelectionCommand { get; }
+        public ICommand MatchFromLayerCommand { get; }
 
         private void ReadFromTable()
         {
@@ -288,6 +292,22 @@ namespace NormAdvisor.AutoCAD1.ViewModels
             UpdateStatusText();
 
             doc.SendStringToExecute("NORMAUTOMATCH\n", true, false, false);
+        }
+
+        private void MatchFromSelection()
+        {
+            if (_allRooms.Count == 0) return;
+            var doc = Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            doc.SendStringToExecute("NORMMATCHSELECTION\n", true, false, false);
+        }
+
+        private void MatchFromLayer()
+        {
+            if (_allRooms.Count == 0) return;
+            var doc = Application.DocumentManager.MdiActiveDocument;
+            if (doc == null) return;
+            doc.SendStringToExecute("NORMMATCHLAYER\n", true, false, false);
         }
 
         /// <summary>
